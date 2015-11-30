@@ -202,23 +202,16 @@ static void * SVGKFastImageViewContext = &SVGKFastImageViewContext;
 {
     if( context == SVGKFastImageViewContext )
     {
+#ifdef USE_SUBLAYERS_INSTEAD_OF_BLIT
         if( [keyPath isEqualToString:@"transform"] &&  CGSizeEqualToSize( CGSizeZero, self.tileRatio ) )
         {
             /*SVGKitLogVerbose(@"transform changed. Setting layer scale: %2.2f --> %2.2f", self.layer.contentsScale, self.transform.a);
              self.layer.contentsScale = self.transform.a;*/
             [self.image.CALayerTree removeFromSuperlayer]; // force apple to redraw?
-            [self setNeedsDisplay];
         }
-        else
-        {
-            
-            if( self.disableAutoRedrawAtHighestResolution )
-                ;
-            else
-            {
-                [self setNeedsDisplay];
-            }
-        }
+#endif
+        
+        [self setNeedsDisplay];
     }
     else
     {
