@@ -12,10 +12,9 @@
 @property (nonatomic, assign) BOOL observingImageSize, observingResize, observingOther;
 @end
 
+static void * SVGKFastImageViewContext = &SVGKFastImageViewContext;
+
 @implementation SVGKFastImageView
-{
-	NSString* internalContextPointerBecauseApplesDemandsIt;
-}
 
 @synthesize image = _image;
 @synthesize tileRatio = _tileRatio;
@@ -138,13 +137,6 @@
     self.observingResize = !self.disableAutoRedrawAtHighestResolution;
 }
 
-- (void)primeContext
-{
-    if( !internalContextPointerBecauseApplesDemandsIt ) {
-        internalContextPointerBecauseApplesDemandsIt = @"Apple wrote the addObserver / KVO notification API wrong in the first place and now requires developers to pass around pointers to fake objects to make up for the API deficicineces. You have to have one of these pointers per object, and they have to be internal and private. They serve no real value.";
-    }
-}
-
 - (void)setObservingImageSize:(BOOL)newValue
 {
     if( newValue == _observingImageSize )
@@ -154,15 +146,13 @@
     
     if( self.image )
     {
-        [self primeContext];
-        
         if( self.observingImageSize )
         {
-            [self.image addObserver:self forKeyPath:@"size" options:NSKeyValueObservingOptionNew context:internalContextPointerBecauseApplesDemandsIt];
+            [self.image addObserver:self forKeyPath:@"size" options:NSKeyValueObservingOptionNew context:SVGKFastImageViewContext];
         }
         else
         {
-            [self.image removeObserver:self forKeyPath:@"size" context:internalContextPointerBecauseApplesDemandsIt];
+            [self.image removeObserver:self forKeyPath:@"size" context:SVGKFastImageViewContext];
         }
     }
 }
@@ -174,17 +164,15 @@
     
     _observingResize = newValue;
     
-    [self primeContext];
-    
     if( self.observingResize )
     {
-        [self addObserver:self forKeyPath:@"layer" options:NSKeyValueObservingOptionNew context:internalContextPointerBecauseApplesDemandsIt];
-        [self.layer addObserver:self forKeyPath:@"transform" options:NSKeyValueObservingOptionNew context:internalContextPointerBecauseApplesDemandsIt];
+        [self addObserver:self forKeyPath:@"layer" options:NSKeyValueObservingOptionNew context:SVGKFastImageViewContext];
+        [self.layer addObserver:self forKeyPath:@"transform" options:NSKeyValueObservingOptionNew context:SVGKFastImageViewContext];
     }
     else
     {
-        [self removeObserver:self  forKeyPath:@"layer" context:internalContextPointerBecauseApplesDemandsIt];
-        [self.layer removeObserver:self forKeyPath:@"transform" context:internalContextPointerBecauseApplesDemandsIt];
+        [self removeObserver:self  forKeyPath:@"layer" context:SVGKFastImageViewContext];
+        [self.layer removeObserver:self forKeyPath:@"transform" context:SVGKFastImageViewContext];
     }
 }
 
@@ -195,42 +183,47 @@
     
     _observingOther = newValue;
     
-    [self primeContext];
-    
     if( self.observingOther )
     {
-        [self addObserver:self forKeyPath:@"image" options:NSKeyValueObservingOptionNew context:internalContextPointerBecauseApplesDemandsIt];
-        [self addObserver:self forKeyPath:@"tileRatio" options:NSKeyValueObservingOptionNew context:internalContextPointerBecauseApplesDemandsIt];
-        [self addObserver:self forKeyPath:@"showBorder" options:NSKeyValueObservingOptionNew context:internalContextPointerBecauseApplesDemandsIt];
+        [self addObserver:self forKeyPath:@"image" options:NSKeyValueObservingOptionNew context:SVGKFastImageViewContext];
+        [self addObserver:self forKeyPath:@"tileRatio" options:NSKeyValueObservingOptionNew context:SVGKFastImageViewContext];
+        [self addObserver:self forKeyPath:@"showBorder" options:NSKeyValueObservingOptionNew context:SVGKFastImageViewContext];
     }
     else
     {
-        [self removeObserver:self forKeyPath:@"image" context:internalContextPointerBecauseApplesDemandsIt];
-        [self removeObserver:self forKeyPath:@"tileRatio" context:internalContextPointerBecauseApplesDemandsIt];
-        [self removeObserver:self forKeyPath:@"showBorder" context:internalContextPointerBecauseApplesDemandsIt];
+        [self removeObserver:self forKeyPath:@"image" context:SVGKFastImageViewContext];
+        [self removeObserver:self forKeyPath:@"tileRatio" context:SVGKFastImageViewContext];
+        [self removeObserver:self forKeyPath:@"showBorder" context:SVGKFastImageViewContext];
     }
 }
 
 /** Trigger a call to re-display (at higher or lower draw-resolution) (get Apple to call drawRect: again) */
 -(void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context
 {
-	if( [keyPath isEqualToString:@"transform"] &&  CGSizeEqualToSize( CGSizeZero, self.tileRatio ) )
-	{
-		/*SVGKitLogVerbose(@"transform changed. Setting layer scale: %2.2f --> %2.2f", self.layer.contentsScale, self.transform.a);
-		 self.layer.contentsScale = self.transform.a;*/
-		[self.image.CALayerTree removeFromSuperlayer]; // force apple to redraw?
-		[self setNeedsDisplay];
-	}
-	else
-	{
-		
-		if( self.disableAutoRedrawAtHighestResolution )
-			;
-		else
-		{
-			[self setNeedsDisplay];
-		}
-	}
+    if( context == SVGKFastImageViewContext )
+    {
+        if( [keyPath isEqualToString:@"transform"] &&  CGSizeEqualToSize( CGSizeZero, self.tileRatio ) )
+        {
+            /*SVGKitLogVerbose(@"transform changed. Setting layer scale: %2.2f --> %2.2f", self.layer.contentsScale, self.transform.a);
+             self.layer.contentsScale = self.transform.a;*/
+            [self.image.CALayerTree removeFromSuperlayer]; // force apple to redraw?
+            [self setNeedsDisplay];
+        }
+        else
+        {
+            
+            if( self.disableAutoRedrawAtHighestResolution )
+                ;
+            else
+            {
+                [self setNeedsDisplay];
+            }
+        }
+    }
+    else
+    {
+        [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
+    }
 }
 
 - (void)dealloc
