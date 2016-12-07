@@ -366,25 +366,23 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
 + (CGPoint) readLinetoArgumentSequence:(NSScanner*)scanner path:(CGMutablePathRef)path relativeTo:(CGPoint)origin isRelative:(BOOL) isRelative
 {
     CGPoint p = [SVGKPointsAndPathsParser readCoordinatePair:scanner];
+    [SVGKPointsAndPathsParser readCommaAndWhitespace:scanner];
     CGPoint coord = CGPointMake(p.x+origin.x, p.y+origin.y);
     CGPathAddLineToPoint(path, NULL, coord.x, coord.y);
 #if DEBUG_PATH_CREATION
 	SVGKitLogWarn(@"[%@] PATH: LINE to %2.2f, %2.2f", [SVGKPointsAndPathsParser class], coord.x, coord.y );
 #endif
 	
-    [SVGKPointsAndPathsParser readCommaAndWhitespace:scanner];
-	
 	while( ![scanner isAtEnd])
 	{
 		origin = (isRelative)?coord:origin;
 		p = [SVGKPointsAndPathsParser readCoordinatePair:scanner];
+        [SVGKPointsAndPathsParser readCommaAndWhitespace:scanner];
 		coord = CGPointMake(p.x+origin.x, p.y+origin.y);
 		CGPathAddLineToPoint(path, NULL, coord.x, coord.y);
 #if DEBUG_PATH_CREATION
 		SVGKitLogWarn(@"[%@] PATH: LINE to %2.2f, %2.2f", [SVGKPointsAndPathsParser class], coord.x, coord.y );
 #endif
-		
-		[SVGKPointsAndPathsParser readCommaAndWhitespace:scanner];
 	}
     
     return coord;
@@ -652,6 +650,7 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
     
     CGPoint p2 = [SVGKPointsAndPathsParser readCoordinatePair:scanner];
     CGPoint coord2 = CGPointMake(p2.x+origin.x, p2.y+origin.y);
+    [SVGKPointsAndPathsParser readCommaAndWhitespace:scanner];
     
     SVGCurve thisCurve;
     if (SVGCurveEqualToCurve(SVGCurveZero, prevCurve)) {
@@ -802,14 +801,18 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
 	
 	CGFloat phi;
 	
+    [SVGKPointsAndPathsParser readCommaAndWhitespace:scanner];
 	[SVGKPointsAndPathsParser readCoordinate:scanner intoFloat:&phi];
+    [SVGKPointsAndPathsParser readCommaAndWhitespace:scanner];
 	
 	phi *= M_PI/180.;
 	
 	phi = fmod(phi, 2 * M_PI);
 	
-	CGPoint flags = [SVGKPointsAndPathsParser readCoordinatePair:scanner];
-	
+    [SVGKPointsAndPathsParser readCommaAndWhitespace:scanner];
+    CGPoint flags = [SVGKPointsAndPathsParser readCoordinatePair:scanner];
+    [SVGKPointsAndPathsParser readCommaAndWhitespace:scanner];
+    
 	BOOL largeArcFlag = flags.x != 0.;
 	BOOL sweepFlag = flags.y != 0.;
 
