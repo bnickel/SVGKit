@@ -220,6 +220,45 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
     [SVGKPointsAndPathsParser readWhitespace:scanner];
 }
 
++ (BOOL)readFloats:(CGFloat[])values count:(NSInteger)count scanner:(NSScanner *)scanner
+{
+    NSInteger read = 0;
+    while (read < count) {
+        
+        BOOL success;
+        CGFloat value;
+#if CGFLOAT_IS_DOUBLE
+        success = [scanner scanDouble:&value];
+#else
+        success = [scanner scanFloat:&value];
+#endif
+        if (!success) {
+            if (read != 0) {
+                SVGKitLogWarn(@"Expected zero or %lld values but got %lld.  Remaining string: %@", (long long)count, (long long)read, [self readRemainingStringForAssertion:scanner]);
+            }
+            break;
+        }
+        
+        [self readCommaAndWhitespace:scanner];
+        
+        values[read++] = value;
+    }
+    
+    return read;
+}
+
++ (BOOL)readCommand:(NSString *)commandCharacters scanner:(NSScanner *)scanner
+{
+    NSCharacterSet *cmdFormat = [NSCharacterSet characterSetWithCharactersInString:commandCharacters];
+    if ([scanner scanCharactersFromSet:cmdFormat intoString:NULL]) {
+        [self readWhitespace:scanner];
+        return YES;
+    } else {
+        SVGKitLogWarn(@"Did not find any of %@.  Remaining string: %@", commandCharacters, [self readRemainingStringForAssertion:scanner]);
+        return NO;
+    }
+}
+
 /**
  moveto-drawto-command-groups:
  moveto-drawto-command-group
@@ -262,10 +301,7 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
  */
 + (CGPoint) readMoveto:(NSScanner*)scanner path:(CGMutablePathRef)path relativeTo:(CGPoint)origin isRelative:(BOOL) isRelative
 {
-    NSString* cmd = nil;
-    NSCharacterSet* cmdFormat = [NSCharacterSet characterSetWithCharactersInString:@"Mm"];
-    if( ! [scanner scanCharactersFromSet:cmdFormat intoString:&cmd] )
-	{
+    if (![self readCommand:@"Mm" scanner:scanner]) {
 		NSAssert(FALSE, @"failed to scan move to command");
 		return origin;
 	}
@@ -331,6 +367,8 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
         NSAssert(FALSE, @"invalid coord starting at %@", [self readRemainingStringForAssertion:scanner]);
     }
 #endif
+    
+    printf("%.2f,", *floatPointer);
 }
 
 /** 
@@ -343,11 +381,7 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
 	SVGKitLogVerbose(@"Parsing command string: line-to command");
 #endif
 	
-    NSString* cmd = nil;
-    NSCharacterSet* cmdFormat = [NSCharacterSet characterSetWithCharactersInString:@"Ll"];
-    
-	if( ! [scanner scanCharactersFromSet:cmdFormat intoString:&cmd] )
-	{
+    if (![self readCommand:@"Ll" scanner:scanner]) {
 		NSAssert( FALSE, @"failed to scan line to command");
 		return origin;
 	}
@@ -398,11 +432,7 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
 	SVGKitLogVerbose(@"Parsing command string: quadratic-bezier-curve-to command");
 #endif
 	
-    NSString* cmd = nil;
-    NSCharacterSet* cmdFormat = [NSCharacterSet characterSetWithCharactersInString:@"Qq"];
-    
-	if( ! [scanner scanCharactersFromSet:cmdFormat intoString:&cmd] )
-	{
+    if (![self readCommand:@"Qq" scanner:scanner]) {
 		NSAssert( FALSE, @"failed to scan quadratic curve to command");
 		return SVGCurveZero;
 	}
@@ -466,11 +496,8 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
 #if VERBOSE_PARSE_SVG_COMMAND_STRINGS
 	SVGKitLogVerbose(@"Parsing command string: smooth-quadratic-bezier-curve-to command");
 #endif
-	NSString* cmd = nil;
-    NSCharacterSet* cmdFormat = [NSCharacterSet characterSetWithCharactersInString:@"Tt"];
     
-	if( ! [scanner scanCharactersFromSet:cmdFormat intoString:&cmd] )
-	{
+    if (![self readCommand:@"Tt" scanner:scanner]) {
 		NSAssert( FALSE, @"failed to scan smooth quadratic curve to command");
 		return SVGCurveZero;
 	}
@@ -537,11 +564,8 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
 #if VERBOSE_PARSE_SVG_COMMAND_STRINGS
 	SVGKitLogVerbose(@"Parsing command string: curve-to command");
 #endif
-    NSString* cmd = nil;
-    NSCharacterSet* cmdFormat = [NSCharacterSet characterSetWithCharactersInString:@"Cc"];
     
-	if( ! [scanner scanCharactersFromSet:cmdFormat intoString:&cmd])
-	{
+    if (![self readCommand:@"Cc" scanner:scanner]) {
 		NSAssert( FALSE, @"failed to scan curve to command");
 		return SVGCurveZero;
 	}
@@ -607,14 +631,10 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
  */
 + (SVGCurve) readSmoothCurvetoCommand:(NSScanner*)scanner path:(CGMutablePathRef)path relativeTo:(CGPoint)origin withPrevCurve:(SVGCurve)prevCurve
 {
-    NSString* cmd = nil;
-    NSCharacterSet* cmdFormat = [NSCharacterSet characterSetWithCharactersInString:@"Ss"];
-    BOOL ok = [scanner scanCharactersFromSet:cmdFormat intoString:&cmd];
-    
-    NSAssert(ok, @"failed to scan smooth curve to command");
-    if (!ok) return SVGCurveZero;
-	
-    [SVGKPointsAndPathsParser readWhitespace:scanner];
+    if (![self readCommand:@"Ss" scanner:scanner]) {
+        NSAssert(NO, @"failed to scan smooth curve to command");
+        return SVGCurveZero;
+    }
     
     SVGCurve lastCurve = [SVGKPointsAndPathsParser readSmoothCurvetoArgumentSequence:scanner path:path relativeTo:origin withPrevCurve:prevCurve];
     return lastCurve;
@@ -701,12 +721,11 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
 #if VERBOSE_PARSE_SVG_COMMAND_STRINGS
 	SVGKitLogVerbose(@"Parsing command string: vertical-line-to command");
 #endif
-    NSString* cmd = nil;
-    NSCharacterSet* cmdFormat = [NSCharacterSet characterSetWithCharactersInString:@"Vv"];
-    BOOL ok = [scanner scanCharactersFromSet:cmdFormat intoString:&cmd];
     
-    NSAssert(ok, @"failed to scan vertical line to command");
-    if (!ok) return origin;
+    if (![self readCommand:@"Vv" scanner:scanner]) {
+        NSAssert(NO, @"failed to scan vertical line to command");
+        return origin;
+    }
 	
     [SVGKPointsAndPathsParser readWhitespace:scanner];
     
@@ -744,14 +763,11 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
 #if VERBOSE_PARSE_SVG_COMMAND_STRINGS
 	SVGKitLogVerbose(@"Parsing command string: horizontal-line-to command");
 #endif
-    NSString* cmd = nil;
-    NSCharacterSet* cmdFormat = [NSCharacterSet characterSetWithCharactersInString:@"Hh"];
     
-	if( ! [scanner scanCharactersFromSet:cmdFormat intoString:&cmd] )
-	{
-		NSAssert( FALSE, @"failed to scan horizontal line to command");
-		return origin;
-	}
+    if (![self readCommand:@"Hh" scanner:scanner]) {
+        NSAssert(NO, @"failed to scan horizontal line to command");
+        return origin;
+    }
 	
     [SVGKPointsAndPathsParser readWhitespace:scanner];
     
@@ -764,14 +780,11 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
 #if VERBOSE_PARSE_SVG_COMMAND_STRINGS
 	SVGKitLogVerbose(@"Parsing command string: close command");
 #endif
-    NSString* cmd = nil;
-    NSCharacterSet* cmdFormat = [NSCharacterSet characterSetWithCharactersInString:@"Zz"];
-	
-	if( ! [scanner scanCharactersFromSet:cmdFormat intoString:&cmd] )
-	{
-		NSAssert( FALSE, @"failed to scan close command");
-		return origin;
-	}
+    
+    if (![self readCommand:@"Zz" scanner:scanner]) {
+        NSAssert(NO, @"failed to scan close command");
+        return origin;
+    }
 	
     CGPathCloseSubpath(path);
 #if DEBUG_PATH_CREATION
@@ -781,129 +794,116 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
 	return CGPathGetCurrentPoint(path);
 }
 
-+ (SVGCurve)readEllipticalArcArguments:(NSScanner*)scanner path:(CGMutablePathRef)path relativeTo:(CGPoint)origin
++ (SVGCurve)readEllipticalArcArguments:(NSScanner *)scanner path:(CGMutablePathRef)path relativeTo:(CGPoint)origin
 {
-	NSCharacterSet* cmdFormat = [NSCharacterSet characterSetWithCharactersInString:@"Aa"];
-	
-	[scanner scanCharactersFromSet:cmdFormat intoString:nil];
 
-	// need to find the center point of the ellipse from the two points and an angle
-	// see http://www.w3.org/TR/SVG/implnote.html#ArcImplementationNotes for these calculations
-	
-	CGPoint currentPt = CGPathGetCurrentPoint(path);
-	
-	CGFloat x1 = currentPt.x;
-	CGFloat y1 = currentPt.y;
-	
-	CGPoint radii = [SVGKPointsAndPathsParser readCoordinatePair:scanner];
-	CGFloat rx = fabs(radii.x);
-	CGFloat ry = fabs(radii.y);
-	
-	CGFloat phi;
-	
-    [SVGKPointsAndPathsParser readCommaAndWhitespace:scanner];
-	[SVGKPointsAndPathsParser readCoordinate:scanner intoFloat:&phi];
-    [SVGKPointsAndPathsParser readCommaAndWhitespace:scanner];
-	
-	phi *= M_PI/180.;
-	
-	phi = fmod(phi, 2 * M_PI);
-	
-    [SVGKPointsAndPathsParser readCommaAndWhitespace:scanner];
-    CGPoint flags = [SVGKPointsAndPathsParser readCoordinatePair:scanner];
-    [SVGKPointsAndPathsParser readCommaAndWhitespace:scanner];
+    if (![self readCommand:@"Aa" scanner:scanner]) {
+        NSAssert(NO, @"failed to scan close command");
+        return SVGCurveZero;
+    }
     
-	BOOL largeArcFlag = flags.x != 0.;
-	BOOL sweepFlag = flags.y != 0.;
-
-	CGPoint endPoint = [SVGKPointsAndPathsParser readCoordinatePair:scanner];
-
-	// end parsing
-
-	CGFloat x2 = origin.x + endPoint.x;
-	CGFloat y2 = origin.y + endPoint.y;
-
-	SVGCurve curve;
-	
-	curve.p = CGPointMake(x2, y2);
-	
-	if (rx == 0 || ry == 0)
-	{
-		CGPathAddLineToPoint(path, NULL, curve.p.x, curve.p.y);
-		return curve;
-	}
-	CGFloat cosPhi = cos(phi);
-	CGFloat sinPhi = sin(phi);
-	
-	CGFloat	x1p = cosPhi * (x1-x2)/2. + sinPhi * (y1-y2)/2.;
-	CGFloat	y1p = -sinPhi * (x1-x2)/2. + cosPhi * (y1-y2)/2.;
-	
-	CGFloat lhs;
-	{
-		CGFloat rx_2 = rx * rx;
-		CGFloat ry_2 = ry * ry;
-		CGFloat xp_2 = x1p * x1p;
-		CGFloat yp_2 = y1p * y1p;
-
-		CGFloat delta = xp_2/rx_2 + yp_2/ry_2;
-		
-		if (delta > 1.0)
-		{
-			rx *= sqrt(delta);
-			ry *= sqrt(delta);
-			rx_2 = rx * rx;
-			ry_2 = ry * ry;
-		}
-		CGFloat sign = (largeArcFlag == sweepFlag) ? -1 : 1;
-		CGFloat numerator = rx_2 * ry_2 - rx_2 * yp_2 - ry_2 * xp_2;
-		CGFloat denom = rx_2 * yp_2 + ry_2 * xp_2;
-		
-		numerator = MAX(0, numerator);
-		
-		lhs = sign * sqrt(numerator/denom);
-	}
-	
-	CGFloat cxp = lhs * (rx*y1p)/ry;
-	CGFloat cyp = lhs * -((ry * x1p)/rx);
-	
-	CGFloat cx = cosPhi * cxp + -sinPhi * cyp + (x1+x2)/2.;
-	CGFloat cy = cxp * sinPhi + cyp * cosPhi + (y1+y2)/2.;
-	
-	// transform our ellipse into the unit circle
-
-	CGAffineTransform tr = CGAffineTransformMakeScale(1./rx, 1./ry);
-
-	tr = CGAffineTransformRotate(tr, -phi);
-	tr = CGAffineTransformTranslate(tr, -cx, -cy);
-	
-	CGPoint arcPt1 = CGPointApplyAffineTransform(CGPointMake(x1, y1), tr);
-	CGPoint arcPt2 = CGPointApplyAffineTransform(CGPointMake(x2, y2), tr);
-		
-	CGFloat startAngle = atan2(arcPt1.y, arcPt1.x);
-	CGFloat endAngle = atan2(arcPt2.y, arcPt2.x);
-	
-	CGFloat angleDelta = endAngle - startAngle;;
-	
-	if (sweepFlag)
-	{
-		if (angleDelta < 0)
-			angleDelta += 2. * M_PI;
-	}
-	else
-	{
-		if (angleDelta > 0)
-			angleDelta = angleDelta - 2 * M_PI;
-	}
-	// construct the inverse transform
-	CGAffineTransform trInv = CGAffineTransformMakeTranslation( cx, cy);
-	
-	trInv = CGAffineTransformRotate(trInv, phi);
-	trInv = CGAffineTransformScale(trInv, rx, ry);
-
-	// add a inversely transformed circular arc to the current path
-	CGPathAddRelativeArc( path, &trInv, 0, 0, 1., startAngle, angleDelta);
-	
-	return curve;
+    SVGCurve curve = SVGCurveZero;
+    CGFloat parameters[7];
+    while ([self readFloats:&parameters count:7 scanner:scanner] == 7) {
+    
+        // need to find the center point of the ellipse from the two points and an angle
+        // see http://www.w3.org/TR/SVG/implnote.html#ArcImplementationNotes for these calculations
+        
+        CGPoint currentPt = CGPathGetCurrentPoint(path);
+        
+        CGFloat x1 = currentPt.x;
+        CGFloat y1 = currentPt.y;
+        
+        CGFloat rx = fabs(parameters[0]);
+        CGFloat ry = fabs(parameters[1]);
+        CGFloat phi = fmod(parameters[2] * M_PI / 180., 2 * M_PI);
+        BOOL largeArcFlag = parameters[3] != 0.;
+        BOOL sweepFlag = parameters[4] != 0.;
+        CGFloat x2 = parameters[5] + origin.x;
+        CGFloat y2 = parameters[6] + origin.y;
+        
+        curve.p = CGPointMake(x2, y2);
+        
+        if (rx == 0 || ry == 0)
+        {
+            CGPathAddLineToPoint(path, NULL, curve.p.x, curve.p.y);
+            return curve;
+        }
+        CGFloat cosPhi = cos(phi);
+        CGFloat sinPhi = sin(phi);
+        
+        CGFloat	x1p = cosPhi * (x1-x2)/2. + sinPhi * (y1-y2)/2.;
+        CGFloat	y1p = -sinPhi * (x1-x2)/2. + cosPhi * (y1-y2)/2.;
+        
+        CGFloat lhs;
+        {
+            CGFloat rx_2 = rx * rx;
+            CGFloat ry_2 = ry * ry;
+            CGFloat xp_2 = x1p * x1p;
+            CGFloat yp_2 = y1p * y1p;
+            
+            CGFloat delta = xp_2/rx_2 + yp_2/ry_2;
+            
+            if (delta > 1.0)
+            {
+                rx *= sqrt(delta);
+                ry *= sqrt(delta);
+                rx_2 = rx * rx;
+                ry_2 = ry * ry;
+            }
+            CGFloat sign = (largeArcFlag == sweepFlag) ? -1 : 1;
+            CGFloat numerator = rx_2 * ry_2 - rx_2 * yp_2 - ry_2 * xp_2;
+            CGFloat denom = rx_2 * yp_2 + ry_2 * xp_2;
+            
+            numerator = MAX(0, numerator);
+            
+            lhs = sign * sqrt(numerator/denom);
+        }
+        
+        CGFloat cxp = lhs * (rx*y1p)/ry;
+        CGFloat cyp = lhs * -((ry * x1p)/rx);
+        
+        CGFloat cx = cosPhi * cxp + -sinPhi * cyp + (x1+x2)/2.;
+        CGFloat cy = cxp * sinPhi + cyp * cosPhi + (y1+y2)/2.;
+        
+        // transform our ellipse into the unit circle
+        
+        CGAffineTransform tr = CGAffineTransformMakeScale(1./rx, 1./ry);
+        
+        tr = CGAffineTransformRotate(tr, -phi);
+        tr = CGAffineTransformTranslate(tr, -cx, -cy);
+        
+        CGPoint arcPt1 = CGPointApplyAffineTransform(CGPointMake(x1, y1), tr);
+        CGPoint arcPt2 = CGPointApplyAffineTransform(CGPointMake(x2, y2), tr);
+        
+        CGFloat startAngle = atan2(arcPt1.y, arcPt1.x);
+        CGFloat endAngle = atan2(arcPt2.y, arcPt2.x);
+        
+        CGFloat angleDelta = endAngle - startAngle;;
+        
+        if (sweepFlag)
+        {
+            if (angleDelta < 0)
+                angleDelta += 2. * M_PI;
+        }
+        else
+        {
+            if (angleDelta > 0)
+                angleDelta = angleDelta - 2 * M_PI;
+        }
+        // construct the inverse transform
+        CGAffineTransform trInv = CGAffineTransformMakeTranslation( cx, cy);
+        
+        trInv = CGAffineTransformRotate(trInv, phi);
+        trInv = CGAffineTransformScale(trInv, rx, ry);
+        
+        // add a inversely transformed circular arc to the current path
+        CGPathAddRelativeArc( path, &trInv, 0, 0, 1., startAngle, angleDelta);
+        
+        origin = CGPathGetCurrentPoint(path);
+    }
+    
+    return curve;
 }
 
 @end
