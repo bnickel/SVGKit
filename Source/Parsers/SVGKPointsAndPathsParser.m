@@ -315,14 +315,21 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
     return p;
 }
 
++ (NSString *)readRemainingStringForAssertion:(NSScanner *)scanner
+{
+    return [scanner.string substringFromIndex:scanner.scanLocation];
+}
+
 + (void) readCoordinate:(NSScanner*)scanner intoFloat:(CGFloat*) floatPointer
 {
 #if CGFLOAT_IS_DOUBLE
-	if( ! [scanner scanDouble:floatPointer] )
-		NSAssert(FALSE, @"invalid coord");
+    if( ! [scanner scanDouble:floatPointer] ) {
+        NSAssert(FALSE, @"invalid coord starting at %@", [self readRemainingStringForAssertion:scanner]);
+    }
 #else
-	if( ! [scanner scanFloat:floatPointer] )
-		NSAssert(FALSE, @"invalid coord");
+    if( ! [scanner scanFloat:floatPointer] ) {
+        NSAssert(FALSE, @"invalid coord starting at %@", [self readRemainingStringForAssertion:scanner]);
+    }
 #endif
 }
 
