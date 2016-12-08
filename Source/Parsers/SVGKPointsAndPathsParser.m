@@ -590,13 +590,13 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
  smooth-curveto:
  ( "S" | "s" ) wsp* smooth-curveto-argument-sequence
  */
-+ (SVGPathState)readSmoothCurvetoCommand:(NSScanner *)scanner path:(CGMutablePathRef)path relativeTo:(CGPoint)origin withPrevState:(SVGPathState)prevState
++ (SVGPathState)readSmoothCurvetoCommand:(NSScanner *)scanner path:(CGMutablePathRef)path relativeTo:(CGPoint)origin withPrevState:(SVGPathState)prevState isRelative:(BOOL)isRelative
 {
     if (![self readCommand:@"Ss" scanner:scanner]) {
         return SVGPathStateError;
     }
     
-    return [self readSmoothCurvetoArgumentSequence:scanner path:path relativeTo:origin withPrevState:prevState];
+    return [self readSmoothCurvetoArgumentSequence:scanner path:path relativeTo:origin withPrevState:prevState isRelative:isRelative];
 }
 
 /**
@@ -604,12 +604,15 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
  smooth-curveto-argument
  | smooth-curveto-argument comma-wsp? smooth-curveto-argument-sequence
  */
-+ (SVGPathState)readSmoothCurvetoArgumentSequence:(NSScanner *)scanner path:(CGMutablePathRef)path relativeTo:(CGPoint)origin withPrevState:(SVGPathState)prevState
++ (SVGPathState)readSmoothCurvetoArgumentSequence:(NSScanner *)scanner path:(CGMutablePathRef)path relativeTo:(CGPoint)origin withPrevState:(SVGPathState)prevState isRelative:(BOOL)isRelative
 {
     SVGPathState state = [self readSmoothCurvetoArgument:scanner path:path relativeTo:origin withPrevState:prevState];
     
     while ( ! [scanner isAtEnd] && ! state.hasError ) {
-        state = [self readSmoothCurvetoArgument:scanner path:path relativeTo:state.point withPrevState:state];
+        if (isRelative) {
+            origin = state.point;
+        }
+        state = [self readSmoothCurvetoArgument:scanner path:path relativeTo:origin withPrevState:state];
     }
     
     return state;
@@ -747,126 +750,125 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
     return SVGPathStateMakeWithPoint(CGPathGetCurrentPoint(path));
 }
 
-+ (SVGPathState)readEllipticalArcArguments:(NSScanner *)scanner path:(CGMutablePathRef)path relativeTo:(CGPoint)origin
++ (SVGPathState)readEllipticalArcCommand:(NSScanner *)scanner path:(CGMutablePathRef)path relativeTo:(CGPoint)origin isRelative:(BOOL)isRelative
 {
-
     if (![self readCommand:@"Aa" scanner:scanner]) {
         return SVGPathStateError;
     }
     
-    SVGCurve curve = SVGCurveZero;
-    CGFloat parameters[7];
-    NSInteger readParameters = [self readFloats:parameters count:7 scanner:scanner];
-    
-    if (readParameters != 7) {
-        SVGKitLogWarn(@"Expected 7 parameters in first pass, got %lld.", (long long)readParameters);
-        return SVGPathStateError;
-    }
-    
-    do {
-        // need to find the center point of the ellipse from the two points and an angle
-        // see http://www.w3.org/TR/SVG/implnote.html#ArcImplementationNotes for these calculations
-        
-        CGPoint currentPt = CGPathGetCurrentPoint(path);
-        
-        CGFloat x1 = currentPt.x;
-        CGFloat y1 = currentPt.y;
-        
-        CGFloat rx = fabs(parameters[0]);
-        CGFloat ry = fabs(parameters[1]);
-        CGFloat phi = fmod(parameters[2] * M_PI / 180., 2 * M_PI);
-        BOOL largeArcFlag = parameters[3] != 0.;
-        BOOL sweepFlag = parameters[4] != 0.;
-        CGFloat x2 = parameters[5] + origin.x;
-        CGFloat y2 = parameters[6] + origin.y;
-        
-        curve.p = CGPointMake(x2, y2);
-        
-        if (rx == 0 || ry == 0)
-        {
-            CGPathAddLineToPoint(path, NULL, curve.p.x, curve.p.y);
-            return SVGPathStateMakeWithPoint(origin); // TODO: This is short circuting and wrong.
-        }
-        CGFloat cosPhi = cos(phi);
-        CGFloat sinPhi = sin(phi);
-        
-        CGFloat	x1p = cosPhi * (x1-x2)/2. + sinPhi * (y1-y2)/2.;
-        CGFloat	y1p = -sinPhi * (x1-x2)/2. + cosPhi * (y1-y2)/2.;
-        
-        CGFloat lhs;
-        {
-            CGFloat rx_2 = rx * rx;
-            CGFloat ry_2 = ry * ry;
-            CGFloat xp_2 = x1p * x1p;
-            CGFloat yp_2 = y1p * y1p;
-            
-            CGFloat delta = xp_2/rx_2 + yp_2/ry_2;
-            
-            if (delta > 1.0)
-            {
-                rx *= sqrt(delta);
-                ry *= sqrt(delta);
-                rx_2 = rx * rx;
-                ry_2 = ry * ry;
-            }
-            CGFloat sign = (largeArcFlag == sweepFlag) ? -1 : 1;
-            CGFloat numerator = rx_2 * ry_2 - rx_2 * yp_2 - ry_2 * xp_2;
-            CGFloat denom = rx_2 * yp_2 + ry_2 * xp_2;
-            
-            numerator = MAX(0, numerator);
-            
-            lhs = sign * sqrt(numerator/denom);
-        }
-        
-        CGFloat cxp = lhs * (rx*y1p)/ry;
-        CGFloat cyp = lhs * -((ry * x1p)/rx);
-        
-        CGFloat cx = cosPhi * cxp + -sinPhi * cyp + (x1+x2)/2.;
-        CGFloat cy = cxp * sinPhi + cyp * cosPhi + (y1+y2)/2.;
-        
-        // transform our ellipse into the unit circle
-        
-        CGAffineTransform tr = CGAffineTransformMakeScale(1./rx, 1./ry);
-        
-        tr = CGAffineTransformRotate(tr, -phi);
-        tr = CGAffineTransformTranslate(tr, -cx, -cy);
-        
-        CGPoint arcPt1 = CGPointApplyAffineTransform(CGPointMake(x1, y1), tr);
-        CGPoint arcPt2 = CGPointApplyAffineTransform(CGPointMake(x2, y2), tr);
-        
-        CGFloat startAngle = atan2(arcPt1.y, arcPt1.x);
-        CGFloat endAngle = atan2(arcPt2.y, arcPt2.x);
-        
-        CGFloat angleDelta = endAngle - startAngle;;
-        
-        if (sweepFlag)
-        {
-            if (angleDelta < 0)
-                angleDelta += 2. * M_PI;
-        }
-        else
-        {
-            if (angleDelta > 0)
-                angleDelta = angleDelta - 2 * M_PI;
-        }
-        // construct the inverse transform
-        CGAffineTransform trInv = CGAffineTransformMakeTranslation( cx, cy);
-        
-        trInv = CGAffineTransformRotate(trInv, phi);
-        trInv = CGAffineTransformScale(trInv, rx, ry);
-        
-        // add a inversely transformed circular arc to the current path
-        CGPathAddRelativeArc( path, &trInv, 0, 0, 1., startAngle, angleDelta);
-        
-        origin = CGPathGetCurrentPoint(path);
-    } while ((readParameters = [self readFloats:&parameters count:7 scanner:scanner]) == 7);
-    
-    if (readParameters != 0) {
-        SVGKitLogWarn(@"Expected 7 parameters in first pass, got %lld.", (long long)readParameters);
-        return SVGPathStateError;
-    }
+    return [self readEllipticalArcArgumentSequence:scanner path:path relativeTo:origin isRelative:isRelative];
+}
 
-    return SVGPathStateMakeWithPoint(origin);
++ (SVGPathState)readEllipticalArcArgumentSequence:(NSScanner *)scanner path:(CGMutablePathRef)path relativeTo:(CGPoint)origin isRelative:(BOOL)isRelative
+{
+    SVGPathState state = [self readEllipticalArcArgument:scanner path:path relativeTo:origin];
+    
+    while ( ! [scanner isAtEnd] && ! state.hasError ) {
+        if (isRelative) { origin = state.point; }
+        state = [self readEllipticalArcArgument:scanner path:path relativeTo:origin];
+    }
+    
+    return state;
+}
+
++ (SVGPathState)readEllipticalArcArgument:(NSScanner *)scanner path:(CGMutablePathRef)path relativeTo:(CGPoint)origin
+{
+    CGFloat parameters[7];
+    if ([self readFloats:parameters count:7 scanner:scanner] != 7) {
+        return SVGPathStateError;
+    }
+    
+    // need to find the center point of the ellipse from the two points and an angle
+    // see http://www.w3.org/TR/SVG/implnote.html#ArcImplementationNotes for these calculations
+    CGPoint currentPt = CGPathGetCurrentPoint(path);
+    CGFloat x1 = currentPt.x;
+    CGFloat y1 = currentPt.y;
+    CGFloat rx = fabs(parameters[0]);
+    CGFloat ry = fabs(parameters[1]);
+    CGFloat phi = fmod(parameters[2] * M_PI / 180., 2 * M_PI);
+    BOOL largeArcFlag = parameters[3] != 0.;
+    BOOL sweepFlag = parameters[4] != 0.;
+    CGFloat x2 = parameters[5] + origin.x;
+    CGFloat y2 = parameters[6] + origin.y;
+    
+    if (rx == 0 || ry == 0) {
+        CGPathAddLineToPoint(path, NULL, x2, y2);
+        return SVGPathStateMakeWithPoint(CGPointMake(x2, y2));
+    }
+    
+    CGFloat cosPhi = cos(phi);
+    CGFloat sinPhi = sin(phi);
+    
+    CGFloat	x1p = cosPhi * (x1-x2)/2. + sinPhi * (y1-y2)/2.;
+    CGFloat	y1p = -sinPhi * (x1-x2)/2. + cosPhi * (y1-y2)/2.;
+    
+    CGFloat lhs;
+    {
+        CGFloat rx_2 = rx * rx;
+        CGFloat ry_2 = ry * ry;
+        CGFloat xp_2 = x1p * x1p;
+        CGFloat yp_2 = y1p * y1p;
+        
+        CGFloat delta = xp_2/rx_2 + yp_2/ry_2;
+        
+        if (delta > 1.0)
+        {
+            rx *= sqrt(delta);
+            ry *= sqrt(delta);
+            rx_2 = rx * rx;
+            ry_2 = ry * ry;
+        }
+        CGFloat sign = (largeArcFlag == sweepFlag) ? -1 : 1;
+        CGFloat numerator = rx_2 * ry_2 - rx_2 * yp_2 - ry_2 * xp_2;
+        CGFloat denom = rx_2 * yp_2 + ry_2 * xp_2;
+        
+        numerator = MAX(0, numerator);
+        
+        lhs = sign * sqrt(numerator/denom);
+    }
+    
+    CGFloat cxp = lhs * (rx*y1p)/ry;
+    CGFloat cyp = lhs * -((ry * x1p)/rx);
+    
+    CGFloat cx = cosPhi * cxp + -sinPhi * cyp + (x1+x2)/2.;
+    CGFloat cy = cxp * sinPhi + cyp * cosPhi + (y1+y2)/2.;
+    
+    // transform our ellipse into the unit circle
+    
+    CGAffineTransform tr = CGAffineTransformMakeScale(1./rx, 1./ry);
+    
+    tr = CGAffineTransformRotate(tr, -phi);
+    tr = CGAffineTransformTranslate(tr, -cx, -cy);
+    
+    CGPoint arcPt1 = CGPointApplyAffineTransform(CGPointMake(x1, y1), tr);
+    CGPoint arcPt2 = CGPointApplyAffineTransform(CGPointMake(x2, y2), tr);
+    
+    CGFloat startAngle = atan2(arcPt1.y, arcPt1.x);
+    CGFloat endAngle = atan2(arcPt2.y, arcPt2.x);
+    
+    CGFloat angleDelta = endAngle - startAngle;;
+    
+    if (sweepFlag)
+    {
+        if (angleDelta < 0)
+            angleDelta += 2. * M_PI;
+    }
+    else
+    {
+        if (angleDelta > 0)
+            angleDelta = angleDelta - 2 * M_PI;
+    }
+    
+    // construct the inverse transform
+    CGAffineTransform trInv = CGAffineTransformMakeTranslation( cx, cy);
+    
+    trInv = CGAffineTransformRotate(trInv, phi);
+    trInv = CGAffineTransformScale(trInv, rx, ry);
+    
+    // add a inversely transformed circular arc to the current path
+    CGPathAddRelativeArc( path, &trInv, 0, 0, 1., startAngle, angleDelta);
+    CGPathAddLineToPoint(path, NULL, x2, y2);
+    return SVGPathStateMakeWithPoint(CGPointMake(x2, y2));
 }
 
 @end

@@ -111,14 +111,16 @@
 									 isRelative:FALSE];
                     } else if ([@"s" isEqualToString:command]) {
                         lastState = [SVGKPointsAndPathsParser readSmoothCurvetoCommand:commandScanner
-                                                              path:path
-                                                        relativeTo:lastState.point
-                                                     withPrevState:lastState];
+                                                                                  path:path
+                                                                            relativeTo:lastState.point
+                                                                         withPrevState:lastState
+                                                                            isRelative:YES];
                     } else if ([@"S" isEqualToString:command]) {
                         lastState = [SVGKPointsAndPathsParser readSmoothCurvetoCommand:commandScanner
-                                                              path:path
+                                                                                  path:path
                                                                             relativeTo:CGPointZero
-                                                                         withPrevState:lastState];
+                                                                         withPrevState:lastState
+                                                                            isRelative:NO];
                     } else if ([@"q" isEqualToString:command]) {
                         lastState = [SVGKPointsAndPathsParser readQuadraticCurvetoCommand:commandScanner
                                                                             path:path
@@ -140,13 +142,15 @@
                                                                                      relativeTo:CGPointZero
                                                                                   withPrevState:lastState];
 					} else if ([@"a" isEqualToString:command]) {
-                        lastState = [SVGKPointsAndPathsParser readEllipticalArcArguments:commandScanner
-                                                                                    path:path
-                                                                              relativeTo:lastState.point];
-					}  else if ([@"A" isEqualToString:command]) {
-						lastState = [SVGKPointsAndPathsParser readEllipticalArcArguments:commandScanner
-                                                                                         path:path
-                                                                                   relativeTo:CGPointZero];
+                        lastState = [SVGKPointsAndPathsParser readEllipticalArcCommand:commandScanner
+                                                                                  path:path
+                                                                            relativeTo:lastState.point
+                                                                            isRelative:YES];
+                    }  else if ([@"A" isEqualToString:command]) {
+                        lastState = [SVGKPointsAndPathsParser readEllipticalArcCommand:commandScanner
+                                                                                  path:path
+                                                                            relativeTo:CGPointZero
+                                                                            isRelative:NO];
 					} else  {
                         SVGKitLogWarn(@"unsupported command %@", command);
                         lastState = SVGPathStateError;
