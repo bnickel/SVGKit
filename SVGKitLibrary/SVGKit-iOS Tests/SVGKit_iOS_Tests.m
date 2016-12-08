@@ -104,5 +104,17 @@
 		XCTFail(@"Exception Thrown: %@", exception);
 	}
 }
+            
+- (void)testSVGKImageDoesNotCrashWhenNoDocument {
+    @try {
+        @autoreleasepool {
+            [SVGKImage imageWithSource:[SVGKSourceString sourceFromContentsOfString:@""]];
+        }
+        XCTAssertTrue(YES);
+    }
+    @catch (NSException *exception) {
+        XCTFail(@"Exception Thrown: %@", exception);
+    }
+}
 
 @end

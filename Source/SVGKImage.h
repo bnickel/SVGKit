@@ -137,6 +137,7 @@ typedef void (^SVGKImageAsynchronousLoadingDelegate)(SVGKImage* loadedImage, SVG
 
 - (id)initWithContentsOfFile:(NSString *)path;
 - (id)initWithData:(NSData *)data;
+- (id)init UNAVAILABLE_ATTRIBUTE;
 
 #pragma mark - UIImage methods cloned and re-implemented as SVG intelligent methods
 

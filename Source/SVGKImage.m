@@ -265,15 +265,14 @@ static NSMutableDictionary* globalSVGKImageCache;
 			self.DOMDocument = nil;
 			self.DOMTree = nil;
 		}
+        
+        [self addObserver:self forKeyPath:@"DOMTree.viewport" options:NSKeyValueObservingOptionOld context:nil];
 		
 		if ( self.DOMDocument == nil )
 		{
 			SVGKitLogError(@"[%@] ERROR: failed to init SVGKImage with source = %@, returning nil from init methods. Parser warnings and errors = %@", [self class], parseSource, parseErrorsAndWarnings );
 			self = nil;
 		}
-		
-		[self addObserver:self forKeyPath:@"DOMTree.viewport" options:NSKeyValueObservingOptionOld context:nil];
-		//		[self.DOMTree addObserver:self forKeyPath:@"viewport" options:NSKeyValueObservingOptionOld context:nil];
 	}
     return self;
 }
@@ -322,13 +321,7 @@ static NSMutableDictionary* globalSVGKImageCache;
     }
 #endif
 	
-//SOMETIMES CRASHES IN APPLE CODE, CAN'T WORK OUT WHY:	[self removeObserver:self forKeyPath:@"DOMTree.viewport"];
-	@try {
-		[self removeObserver:self forKeyPath:@"DOMTree.viewport"];
-	}
-	@catch (NSException *exception) {
-		SVGKitLogError(@"Exception removing DOMTree.viewport observer");
-	}
+    [self removeObserver:self forKeyPath:@"DOMTree.viewport"];
 	
     
 #if ENABLE_GLOBAL_IMAGE_CACHE_FOR_SVGKIMAGE_IMAGE_NAMED

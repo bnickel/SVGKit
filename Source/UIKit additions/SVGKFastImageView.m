@@ -9,19 +9,18 @@
 @interface SVGKFastImageView ()
 @property(nonatomic,readwrite) NSTimeInterval timeIntervalForLastReRenderOfSVGFromMemory;
 @property (nonatomic, strong) NSDate* startRenderTime, * endRenderTime; /*< for debugging, lets you know how long it took to add/generate the CALayer (may have been cached! Only SVGKImage knows true times) */
-@property (nonatomic) BOOL didRegisterObservers, didRegisterInternalRedrawObservers;
-
+@property (nonatomic, assign) BOOL observingImageSize, observingResize, observingOther;
 @end
 
+static void * SVGKFastImageViewContext = &SVGKFastImageViewContext;
+
 @implementation SVGKFastImageView
-{
-	NSString* internalContextPointerBecauseApplesDemandsIt;
-}
 
 @synthesize image = _image;
 @synthesize tileRatio = _tileRatio;
 @synthesize disableAutoRedrawAtHighestResolution = _disableAutoRedrawAtHighestResolution;
 @synthesize timeIntervalForLastReRenderOfSVGFromMemory = _timeIntervalForLastReRenderOfSVGFromMemory;
+@synthesize observingImageSize = _observingImageSize, observingResize = _observingResize, observingOther = _observingOther;
 
 #if TEMPORARY_WARNING_FOR_APPLES_BROKEN_RENDERINCONTEXT_METHOD
 +(BOOL) svgImageHasNoGradients:(SVGKImage*) image
@@ -103,55 +102,27 @@
 }
 
 - (void)setImage:(SVGKImage *)image {
-	
+    
+    if( _image == image )
+        return;
+    
 #if TEMPORARY_WARNING_FOR_APPLES_BROKEN_RENDERINCONTEXT_METHOD
-	BOOL imageIsGradientFree = [SVGKFastImageView svgImageHasNoGradients:image];
-	if( !imageIsGradientFree )
-		NSLog(@"[%@] WARNING: Apple's rendering DOES NOT ALLOW US to render this image correctly using SVGKFastImageView, because Apple's renderInContext method - according to Apple's docs - ignores Apple's own masking layers. Until Apple fixes this bug, you should use SVGKLayeredImageView for this particular SVG file (or avoid using gradients)", [self class]);
-	
-	if( image.scale != 0.0f )
-		NSLog(@"[%@] WARNING: Apple's rendering DOES NOT ALLOW US to render this image correctly using SVGKFastImageView, because Apple's renderInContext method - according to Apple's docs - ignores Apple's own transforms. Until Apple fixes this bug, you should use SVGKLayeredImageView for this particular SVG file (or avoid using scale: you SHOULD INSTEAD be scaling by setting .size on the image, and ensuring that the incoming SVG has either a viewbox or an explicit svg width or svg height)", [self class]);
+    BOOL imageIsGradientFree = [SVGKFastImageView svgImageHasNoGradients:image];
+    if( !imageIsGradientFree )
+        NSLog(@"[%@] WARNING: Apple's rendering DOES NOT ALLOW US to render this image correctly using SVGKFastImageView, because Apple's renderInContext method - according to Apple's docs - ignores Apple's own masking layers. Until Apple fixes this bug, you should use SVGKLayeredImageView for this particular SVG file (or avoid using gradients)", [self class]);
+    
+    if( image.scale != 0.0f )
+        NSLog(@"[%@] WARNING: Apple's rendering DOES NOT ALLOW US to render this image correctly using SVGKFastImageView, because Apple's renderInContext method - according to Apple's docs - ignores Apple's own transforms. Until Apple fixes this bug, you should use SVGKLayeredImageView for this particular SVG file (or avoid using scale: you SHOULD INSTEAD be scaling by setting .size on the image, and ensuring that the incoming SVG has either a viewbox or an explicit svg width or svg height)", [self class]);
 #endif
     
-    if( !internalContextPointerBecauseApplesDemandsIt ) {
-        internalContextPointerBecauseApplesDemandsIt = @"Apple wrote the addObserver / KVO notification API wrong in the first place and now requires developers to pass around pointers to fake objects to make up for the API deficicineces. You have to have one of these pointers per object, and they have to be internal and private. They serve no real value.";
-    }
-	
-    [_image removeObserver:self forKeyPath:@"size" context:(__bridge void * _Nullable)(internalContextPointerBecauseApplesDemandsIt)];
+    self.observingImageSize = NO; /* Stop observing image before releasing. */
+    
     _image = image;
     
-    /** redraw-observers */
-    if( self.disableAutoRedrawAtHighestResolution )
-        ;
-    else {
-        [self addInternalRedrawOnResizeObservers];
-        [_image addObserver:self forKeyPath:@"size" options:NSKeyValueObservingOptionNew context:(__bridge void * _Nullable)(internalContextPointerBecauseApplesDemandsIt)];
-    }
-    
-    /** other obeservers */
-  if (!self.didRegisterObservers) {
-    self.didRegisterObservers = true;
-    [self addObserver:self forKeyPath:@"image" options:NSKeyValueObservingOptionNew context:(__bridge void * _Nullable)(internalContextPointerBecauseApplesDemandsIt)];
-    [self addObserver:self forKeyPath:@"tileRatio" options:NSKeyValueObservingOptionNew context:(__bridge void * _Nullable)(internalContextPointerBecauseApplesDemandsIt)];
-    [self addObserver:self forKeyPath:@"showBorder" options:NSKeyValueObservingOptionNew context:(__bridge void * _Nullable)(internalContextPointerBecauseApplesDemandsIt)];
-  }
-
-}
-
--(void) addInternalRedrawOnResizeObservers
-{
-  if (self.didRegisterInternalRedrawObservers) return;
-  self.didRegisterInternalRedrawObservers = true;
-	[self addObserver:self forKeyPath:@"layer" options:NSKeyValueObservingOptionNew context:(__bridge void * _Nullable)(internalContextPointerBecauseApplesDemandsIt)];
-	[self.layer addObserver:self forKeyPath:@"transform" options:NSKeyValueObservingOptionNew context:(__bridge void * _Nullable)(internalContextPointerBecauseApplesDemandsIt)];
-}
-
--(void) removeInternalRedrawOnResizeObservers
-{
-  if (!self.didRegisterInternalRedrawObservers) return;
-	[self removeObserver:self  forKeyPath:@"layer" context:(__bridge void * _Nullable)(internalContextPointerBecauseApplesDemandsIt)];
-	[self.layer removeObserver:self forKeyPath:@"transform" context:(__bridge void * _Nullable)(internalContextPointerBecauseApplesDemandsIt)];
-  self.didRegisterInternalRedrawObservers = false;
+    /* Start observers as needed. */
+    self.observingImageSize = !self.disableAutoRedrawAtHighestResolution;
+    self.observingResize = !self.disableAutoRedrawAtHighestResolution;
+    self.observingOther = YES;
 }
 
 -(void)setDisableAutoRedrawAtHighestResolution:(BOOL)newValue
@@ -160,57 +131,99 @@
 		return;
 	
 	_disableAutoRedrawAtHighestResolution = newValue;
-	
-	if( self.disableAutoRedrawAtHighestResolution ) // disabled, so we have to remove the observers
-	{
-		[self removeInternalRedrawOnResizeObservers];
-	}
-	else // newly-enabled ... must add the observers
-	{
-		[self addInternalRedrawOnResizeObservers];
-	}
+    
+    self.observingImageSize = !self.disableAutoRedrawAtHighestResolution;
+    self.observingResize = !self.disableAutoRedrawAtHighestResolution;
 }
 
-- (void)dealloc
+- (void)setObservingImageSize:(BOOL)newValue
 {
-	if( self.disableAutoRedrawAtHighestResolution )
-		;
-	else
-		[self removeInternalRedrawOnResizeObservers];
-	
-  if (self.didRegisterObservers) {
-    [self removeObserver:self forKeyPath:@"image" context:(__bridge void * _Nullable)(internalContextPointerBecauseApplesDemandsIt)];
-    [self removeObserver:self forKeyPath:@"tileRatio" context:(__bridge void * _Nullable)(internalContextPointerBecauseApplesDemandsIt)];
-    [self removeObserver:self forKeyPath:@"showBorder" context:(__bridge void * _Nullable)(internalContextPointerBecauseApplesDemandsIt)];
-  }
+    if( newValue == _observingImageSize )
+        return;
+    
+    _observingImageSize = newValue;
+    
+    if( self.image )
+    {
+        if( self.observingImageSize )
+        {
+            [self.image addObserver:self forKeyPath:@"size" options:NSKeyValueObservingOptionNew context:SVGKFastImageViewContext];
+        }
+        else
+        {
+            [self.image removeObserver:self forKeyPath:@"size" context:SVGKFastImageViewContext];
+        }
+    }
+}
 
+- (void)setObservingResize:(BOOL)newValue
+{
+    if( newValue == _observingResize )
+        return;
+    
+    _observingResize = newValue;
+    
+    if( self.observingResize )
+    {
+        [self addObserver:self forKeyPath:@"layer" options:NSKeyValueObservingOptionNew context:SVGKFastImageViewContext];
+        [self.layer addObserver:self forKeyPath:@"transform" options:NSKeyValueObservingOptionNew context:SVGKFastImageViewContext];
+    }
+    else
+    {
+        [self removeObserver:self  forKeyPath:@"layer" context:SVGKFastImageViewContext];
+        [self.layer removeObserver:self forKeyPath:@"transform" context:SVGKFastImageViewContext];
+    }
+}
 
-  
-  [_image removeObserver:self forKeyPath:@"size" context:(__bridge void * _Nullable)(internalContextPointerBecauseApplesDemandsIt)];
-	_image = nil;
-	
+- (void)setObservingOther:(BOOL)newValue
+{
+    if( newValue == _observingOther )
+        return;
+    
+    _observingOther = newValue;
+    
+    if( self.observingOther )
+    {
+        [self addObserver:self forKeyPath:@"image" options:NSKeyValueObservingOptionNew context:SVGKFastImageViewContext];
+        [self addObserver:self forKeyPath:@"tileRatio" options:NSKeyValueObservingOptionNew context:SVGKFastImageViewContext];
+        [self addObserver:self forKeyPath:@"showBorder" options:NSKeyValueObservingOptionNew context:SVGKFastImageViewContext];
+    }
+    else
+    {
+        [self removeObserver:self forKeyPath:@"image" context:SVGKFastImageViewContext];
+        [self removeObserver:self forKeyPath:@"tileRatio" context:SVGKFastImageViewContext];
+        [self removeObserver:self forKeyPath:@"showBorder" context:SVGKFastImageViewContext];
+    }
 }
 
 /** Trigger a call to re-display (at higher or lower draw-resolution) (get Apple to call drawRect: again) */
 -(void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context
 {
-	if( [keyPath isEqualToString:@"transform"] &&  CGSizeEqualToSize( CGSizeZero, self.tileRatio ) )
-	{
-		/*SVGKitLogVerbose(@"transform changed. Setting layer scale: %2.2f --> %2.2f", self.layer.contentsScale, self.transform.a);
-		 self.layer.contentsScale = self.transform.a;*/
-		[self.image.CALayerTree removeFromSuperlayer]; // force apple to redraw?
-		[self setNeedsDisplay];
-	}
-	else
-	{
-		
-		if( self.disableAutoRedrawAtHighestResolution )
-			;
-		else
-		{
-			[self setNeedsDisplay];
-		}
-	}
+    if( context == SVGKFastImageViewContext )
+    {
+#ifdef USE_SUBLAYERS_INSTEAD_OF_BLIT
+        if( [keyPath isEqualToString:@"transform"] &&  CGSizeEqualToSize( CGSizeZero, self.tileRatio ) )
+        {
+            /*SVGKitLogVerbose(@"transform changed. Setting layer scale: %2.2f --> %2.2f", self.layer.contentsScale, self.transform.a);
+             self.layer.contentsScale = self.transform.a;*/
+            [self.image.CALayerTree removeFromSuperlayer]; // force apple to redraw?
+        }
+#endif
+        
+        [self setNeedsDisplay];
+    }
+    else
+    {
+        [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
+    }
+}
+
+- (void)dealloc
+{
+    /* Remove all observers. */
+    self.observingImageSize = NO;
+    self.observingResize = NO;
+    self.observingOther = NO;
 }
 
 /**
