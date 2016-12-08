@@ -19,6 +19,7 @@
 #import "SVGRect.h"
 
 #import "SVGTransformable.h"
+#import "NSCharacterSet+SVGKExtensions.h"
 
 @interface SVGElement ()
 
@@ -487,18 +488,11 @@
         {
             selector = [selector substringFromIndex:1];
             __block BOOL matched = NO;
-            [element.className enumerateSubstringsInRange:NSMakeRange(0, element.className.length) options:NSStringEnumerationByWords usingBlock:^(NSString *substring, NSRange substringRange, NSRange enclosingRange, BOOL *stop)
-             {
-                 if( [substring isEqualToString:selector] )
-                 {
-                     matched = YES;
-                     *stop = YES;
-                 }
-             }];
-            if( matched )
-            {
-                *specificity += 100;
-                return YES;
+            for (NSString *className in [element.className componentsSeparatedByCharactersInSet:[NSCharacterSet SVGWhitespaceCharacterSet]]) {
+                if (className.length > 0 && [className isEqualToString:selector]) {
+                    *specificity += 100;
+                    return YES;
+                }
             }
         }
     }
