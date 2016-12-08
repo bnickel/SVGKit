@@ -47,15 +47,15 @@
 	NSScanner* commandScanner = [NSScanner scannerWithString:commandWithParameters];
 	
 	
-	lastCoordinate = [SVGKPointsAndPathsParser readMovetoDrawtoCommandGroups:commandScanner
-													path:path
-											  relativeTo:CGPointZero
-											  isRelative:FALSE];
+    SVGPathState state = [SVGKPointsAndPathsParser readMovetoDrawtoCommandGroups:commandScanner
+                                                                            path:path
+                                                                      relativeTo:CGPointZero
+                                                                      isRelative:NO];
 	
     
 	[SVGKPointsAndPathsParser readCloseCommand:[NSScanner scannerWithString:@"z"]
 									   path:path
-								 relativeTo:lastCoordinate];
+								 relativeTo:state.point];
 	
 	self.pathForShapeInRelativeCoords = path;
 	CGPathRelease(path);
