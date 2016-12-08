@@ -348,7 +348,7 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
             return SVGPathStateError;
         }
         
-        CGPathMoveToPoint(path, NULL, coord.x, coord.y);
+        CGPathAddLineToPoint(path, NULL, coord.x, coord.y);
         
 #if DEBUG_PATH_CREATION
         SVGKitLogWarn(@"[%@] PATH: MOVED to %2.2f, %2.2f", [SVGKPointsAndPathsParser class], coord.x, coord.y );
