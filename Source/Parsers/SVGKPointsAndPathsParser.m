@@ -795,12 +795,12 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
 	return CGPathGetCurrentPoint(path);
 }
 
-+ (SVGCurve)readEllipticalArcArguments:(NSScanner *)scanner path:(CGMutablePathRef)path relativeTo:(CGPoint)origin
++ (CGPoint)readEllipticalArcArguments:(NSScanner *)scanner path:(CGMutablePathRef)path relativeTo:(CGPoint)origin
 {
 
     if (![self readCommand:@"Aa" scanner:scanner]) {
         NSAssert(NO, @"failed to scan close command");
-        return SVGCurveZero;
+        return origin;
     }
     
     SVGCurve curve = SVGCurveZero;
@@ -828,7 +828,7 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
         if (rx == 0 || ry == 0)
         {
             CGPathAddLineToPoint(path, NULL, curve.p.x, curve.p.y);
-            return curve;
+            return origin;
         }
         CGFloat cosPhi = cos(phi);
         CGFloat sinPhi = sin(phi);
@@ -904,7 +904,7 @@ inline BOOL SVGCurveEqualToCurve(SVGCurve curve1, SVGCurve curve2)
         origin = CGPathGetCurrentPoint(path);
     }
     
-    return curve;
+    return origin;
 }
 
 @end

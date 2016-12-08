@@ -157,15 +157,16 @@
 																		 withPrevCurve:lastCurve];
                         lastCoordinate = lastCurve.p;
 					} else if ([@"a" isEqualToString:command]) {
-						lastCurve 	=	[SVGKPointsAndPathsParser readEllipticalArcArguments:commandScanner
-																					 path:path relativeTo:lastCoordinate];
-						
-						lastCoordinate = lastCurve.p;
+                        lastCoordinate = [SVGKPointsAndPathsParser readEllipticalArcArguments:commandScanner
+                                                                                         path:path
+                                                                                   relativeTo:lastCoordinate];
+                        lastCurve = SVGCurveZero;
 						
 					}  else if ([@"A" isEqualToString:command]) {
-						lastCurve 	=	[SVGKPointsAndPathsParser readEllipticalArcArguments:commandScanner
-																					path:path relativeTo:CGPointZero];
-						lastCoordinate = lastCurve.p;
+						lastCoordinate = [SVGKPointsAndPathsParser readEllipticalArcArguments:commandScanner
+                                                                                         path:path
+                                                                                   relativeTo:CGPointZero];
+                        lastCurve = SVGCurveZero;
 					} else  {
                         SVGKitLogWarn(@"unsupported command %@", command);
                     }
